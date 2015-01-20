@@ -1,0 +1,11 @@
+{
+  "name": "house_demo",
+  "subdomain": "buildmedia-house_demo",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "version": "0.0.0-3",
+  "engines": {
+    "node": "0.10.x"
+  }
+}

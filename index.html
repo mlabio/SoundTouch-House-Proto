@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<head>
+<title>Prototype v.05</title> 
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="stylesheet" href="http://code.jquery.com/mobile/1.2.0/jquery.mobile-1.2.0.min.css" />
+	<script src="http://code.jquery.com/jquery-1.8.2.min.js"></script>
+	<script src="http://code.jquery.com/mobile/1.2.0/jquery.mobile-1.2.0.min.js"></script>
+	
+    <script src="/socket.io/socket.io.js"></script>
+	<script>
+
+	
+	/////////////////////
+	//iphone viewport fix
+	
+	  var metas = document.getElementsByTagName('meta');
+	  var i;
+	  if (navigator.userAgent.match(/iPhone/i)) {
+	    for (i=0; i<metas.length; i++) {
+	      if (metas[i].name == "viewport") {
+	        metas[i].content = "width=device-width, minimum-scale=1.0, maximum-scale=1.0";
+	      }
+	    }
+	    document.addEventListener("gesturestart", gestureStart, false);
+	  }
+	  function gestureStart() {
+	    for (i=0; i<metas.length; i++) {
+	      if (metas[i].name == "viewport") {
+	        metas[i].content = "width=device-width, minimum-scale=0.25, maximum-scale=1.6";
+	      }
+	    }
+	  }
+	</script>
+
+    <script>
+		////////////////////////
+       var socket = io.connect('http://192.168.1.3:8080'); //local must be ip for mobile tests
+       //var socket = io.connect(); //jitsu deploy
+        //update userid
+		var x = 0,
+			y = 0,
+			vx = 0,
+			vy = 0,
+			ax = 0,
+			ay = 0,
+			status = 0,
+			xPos = 0,
+			myDirection = null,
+			myTimeout,
+			myMobile = false;
+	
+        socket.on('update_user_id', function (number) {
+            $('#user_id').html(number);
+			$('#motion_status').html("Unknown");
+			deviceStatus();
+
+        });
+		//mobile broadcast
+		socket.on('mobile_broadcast', function(myState,myNumber,myID,sessionID){
+			$('#mobileBroadcast').html(myState);
+			$('#mobileControl').html(myID);
+			$('#mobileSession').html(myNumber);
+		});
+        //update users
+        socket.on('update_user_count', function (number,clients) {
+			
+            $('#user_count').html(number);
+            //alert("update users");
+            if (number > 1) {
+                $('#connection_status').html('connected');
+				            } else {
+                $('#connection_status').html('disconnected');
+           }
+			 $('#user_list').empty();
+			 $.each(clients, function(key, value){
+				$('#user_list').append('<div data-role="content">' + value + '</div>'); 
+			 });
+        });
+
+        $(document).ready(function () {
+
+            socket.emit('new_user');
+
+			$('#frontdoor').click(function(event) {
+			  homeControl($(this).attr("id"));  
+			});
+			$('#upstairs').click(function(event) {
+			  homeControl($(this).attr("id"));
+			});
+			$('#downstairs').click(function(event) {
+			  homeControl($(this).attr("id"));
+			});
+			$('#kitchen').click(function(event) {
+			  homeControl($(this).attr("id"));
+			});			
+			$('#house').click(function(event) {
+			  homeControl($(this).attr("id"));
+			});
+			
+			$('#myVideo').bind("ended", function() {
+				$('#myVidContainer').animate({ opacity: "0"}, 400, 'linear' );
+			});
+
+        });
+
+
+		//////////////////////
+		//////////////////////
+		
+		
+		//mobile button handler
+		function homeControl(myTarget) {
+			//alert(event.target.id);
+			socket.emit('house_handler', myTarget);
+			$('#motion_status').html('Click: ' + myTarget);
+		}
+		socket.on('animate_house', function (myLast, myCurrent) {
+			if(myMobile == false){
+				if(myLast != "house"){
+					$('#' + myLast + '_img').animate({ opacity: "0"}, 400, 'linear' );
+				}
+				$('#' + myCurrent + '_img').animate({ opacity: "1"}, 400, 'linear' );
+				$('#mobileBroadcast').html('Click: ' + myCurrent);
+					switch(myCurrent){
+						case "kitchen":
+							$('#myVidContainer').load('kitchen_video.html', function(){
+								alert('load performed');
+								$('#myVidContainer').delay(800).animate({ opacity: "1"}, 400, 'linear' );
+								//document.getElementById('myVideo').play(); 
+
+							})
+							
+						break;
+						default:
+						$('#myVidContainer').animate({ opacity: "0"}, 400, 'linear' );
+						break;
+					}
+				}
+			
+		});
+			
+			function deviceStatus(){
+			//Detect if the browser supports DeviceMotionEvent
+			if (window.DeviceMotionEvent != undefined) {
+				//ondevicemotion is fired when iOS device detects motion
+				//alert("motion supported");
+				$('#motion_status').html('Mobile Device Detected');
+				$('#qr_code').remove();
+				$('#myVidContainer').remove();
+				$('#debug_gui').css("float","none");
+				myMobile = true;
+				//turn on mobile button interface
+
+				  window.ondevicemotion = function(e) {
+					//ax is the movement on the x axis.
+					//This motion is used to move the ship in the game
+					  ax = event.accelerationIncludingGravity.x * 5;
+					  ay = event.accelerationIncludingGravity.y * 5;
+					 
+					//Status 0 is start, 1 is left, 2 is right, 3 is stay
+					if(status == 0){ //initial condition
+					  status = 3; //stay
+					  //socket.emit('spaceChange', {'ax': 3});
+					  //statusmsg = 'Waiting for movement';
+					  socket.emit('moveMe', 'wait');
+
+					  $('#motion_status').html('Mobile Device Detected - waiting');
+					}
+					if(ax > 14 && status != 2){ //move right on device
+					  status = 2;
+					  //socket.emit('spaceChange', {'ax': 2});
+					  //statusmsg = 'Moving ship right';
+					  socket.emit('moveMe', 'right');
+
+					  $('#motion_status').html('Mobile Device Detected - right');
+					}
+					if(ax < -14 && status != 1){ //move left on device   
+					  status = 1;   
+					  //socket.emit('spaceChange', {'ax': 1});                  
+					  //statusmsg = 'Moving ship left'; 
+					  socket.emit('moveMe', 'left');
+					  $('#motion_status').html('Mobile Device Detected - left');
+					} 
+					if(ax > -14 && ax < 14 && status != 3){ //device held steady
+					  status = 3;
+					  //socket.emit('spaceChange', {'ax': 3});
+					  //statusmsg = 'Ship held steady';
+					  socket.emit('moveMe', 'steady');
+					  $('#motion_status').html('Mobile Device Detected - steady');
+					}
+				}
+			}else{
+				$('#motion_status').html('Desktop Detected');
+				myMobile = false;
+				$('#mobile_gui').remove();
+				$('#desktop_gui').animate({ opacity: "1"}, 400, 'linear' );
+				$('#house_img').animate({ opacity: "1"}, 400, 'linear' );
+			}
+		}
+		//////////////////////
+		/////////////////////
+		window.onload = init;
+		
+		
+
+    </script>
+
+    <style type="text/css">
+		.house { cursor: default; opacity: 0; position: absolute; margin: -20px 0px 0px -30px;		  background-color: transparent;}
+        @import url("style.css");
+		#qr_code {
+		    position: fixed;
+		    top: 50px;
+		    right: 1em;
+			z-index: 9999;
+		}
+		#debug_gui{
+			float: right;
+			margin-top:140px;
+			};
+		#myVidContainer{ 
+		    position: absolute;
+		    top: 50px;
+		    right: 1em;
+			z-index: 9999;
+			background-color:#b0c4de;
+		}
+    </style>
+
+</head>
+<body>
+
+		
+<div id="qr_code">
+<img src="http://chart.apis.google.com/chart?cht=qr&chs=120x120&chl=http%3A//buildmedia.prototype.jit.su&chld=H|0">
+</div>
+    <div data-role="page" data-theme="a" >
+        <div data-role="header"><h1>Prototype v.05</h1></div>
+        <!-- /header -->
+<div data-role="content" >
+<!-- http://neodev.bose.com/_online/Wilkinson/node -->
+	<div id="desktop_gui">
+
+		<span id="house_img" class="house" ><img src="http://www.bgoni.com/mobile/images/house.jpg"></span>
+		<span id="frontdoor_img" class="house" ><img src="http://www.bgoni.com/mobile/images/frontdoor.jpg" ></span>
+		<span id="upstairs_img" class="house" ><img src="http://www.bgoni.com/mobile/images/upstairs.jpg"></span>
+		<span id="downstairs_img" class="house" ><img src="http://www.bgoni.com/mobile/images/downstairs.jpg"></span>
+		<span id="kitchen_img" class="house" ><img src="http://www.bgoni.com/mobile/images/kitchen.jpg"></span>
+		<span id="myVidContainer" class="house"></span>
+	</div>
+
+	<div id="mobile_gui">
+		<a data-role="button" data-theme="a" href="#page1" id="frontdoor">Front Door</a>
+		<a data-role="button" data-theme="a" href="#page1" id="upstairs">Upstairs</a>
+		<a data-role="button" data-theme="a" href="#page1" id="downstairs">Downstairs</a>
+		<a data-role="button" data-theme="a" href="#page1" id="kitchen">Kitchen</a>
+		<a data-role="button" data-theme="b" href="#page1" id="house">Off</a>
+	</div>
+	<div id="debug_gui" data-role="content">
+			<ul id="myAccel" data-role="listview" data-divider-theme="a">
+	            <li data-role="list-divider" role="heading">Mobile Device Broadcast</li>
+	            <li id="mobileBroadcast" data-theme="b" style="padding-bottom:30px; padding-top:20px">offline</li>
+			</ul>
+			<ul id="otherData" data-role="listview" data-divider-theme="a">
+				<li data-role="list-divider" role="heading">Mobile Device Direct</li>
+				<li id="motion_status" data-theme="a"></li>
+				<li data-role="list-divider" role="heading">Client</li>
+				<li id="mobileControl" data-theme="a"></li>
+				<li data-role="list-divider" role="heading">Session</li>
+				<li id="mobileSession" data-theme="a"></li>
+				<li data-role="list-divider" role="heading">User ID</li>
+				<li id="user_id" data-theme="a"></li>
+				<li data-role="list-divider" role="heading">User Count</li>
+				<li id="user_count" data-theme="a"></li>
+				<li data-role="list-divider" role="heading">User List</li>
+				<li id="user_list" data-theme="a"></li>
+			</ul>
+	</div>
+</div>
+               <!-- /content -->
+    <!-- /page -->
+    </div>
+
+</body>
+
+</html>
